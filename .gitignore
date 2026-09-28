@@ -1,0 +1,48 @@
+# Environment & Secrets (CRITICAL: Never commit API keys)
+.env
+*.env
+!.env.example
+*.pem
+*.key
+
+# Python / Backend
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.pytest_cache/
+*.db
+*.sqlite
+*.sqlite3
+
+# Node / Web / Mobile
+node_modules/
+dist/
+dist-ssr/
+build/
+.expo/
+web-build/
+*.tsbuildinfo
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.mobileprovision
+/mobile/ios/
+/mobile/android/
+
+# Logs & System
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

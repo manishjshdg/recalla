@@ -1,0 +1,272 @@
+[
+  {
+    "id": "mem-0001",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-041\nService: Payment API\nSeverity: Critical\nSymptoms: 503 errors, database connection timeout, payment transactions failing\nError Rate: 87.0%\nDeployment Version: v2.4.1\nContext: Spike in traffic after marketing campaign, connections not being released properly\nRoot Cause: Database connection pool exhaustion due to connection leak in async handler introduced in v2.4.1\nResolution: Rolled back to v2.4.0, restarted services, temporarily increased pool size. Root cause: missing await on connection.close() in new async payment handler.\nRunbook Used: payment-db-recovery\nRecovery Time: 8 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-27T19:28:31.305670"
+  },
+  {
+    "id": "mem-0002",
+    "bank_id": "incident-response-agent",
+    "content": "POST-MORTEM for INC-2026-041\nService: Payment API\nRoot Cause (confirmed): Connection leak in async payment handler introduced in v2.4.1 \u2014 missing await on connection.close()\nWhat Happened: After deploying v2.4.1, async payment handlers started accumulating unclosed connections. Under normal traffic this was masked, but the marketing campaign spike exposed the leak causing pool exhaustion within 12 minutes.\nHow It Was Resolved: Immediate rollback to v2.4.0, service restart, temporary pool increase to 200. Fix: added proper async context manager for all DB connections in new handlers.\nWhat Did NOT Work: Initially tried increasing pool size without rollback \u2014 insufficient fix\nSuccessful Runbook: payment-db-recovery\nRecovery Time: 8 minutes\nLessons Learned: All async database handlers must use context managers. Pre-production load testing should simulate peak traffic. DB pool metrics must be in alerting.\nPreventive Actions: Added DB connection count to PagerDuty alerts. Code review checklist now requires async context manager review. Load testing pipeline added to CI/CD.",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-27T19:28:38.964860"
+  },
+  {
+    "id": "mem-0003",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-018\nService: Payment API\nSeverity: SEV-1\nSymptoms: High latency, intermittent 503 errors, DB query timeouts\nError Rate: 34.0%\nDeployment Version: v2.3.0\nContext: Occurred during database maintenance window\nRoot Cause: DB connection pool misconfiguration after infrastructure upgrade \u2014 max_overflow too low for new server capacity\nResolution: Increased max_overflow from 10 to 100, matched to new DB server capacity\nRunbook Used: payment-db-recovery\nRecovery Time: 22 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-27T19:28:41.279079"
+  },
+  {
+    "id": "mem-0004",
+    "bank_id": "incident-response-agent",
+    "content": "POST-MORTEM for INC-2026-018\nService: Payment API\nRoot Cause (confirmed): Connection pool max_overflow setting not updated after DB server upgrade\nWhat Happened: DB server was upgraded to a larger instance but application pool settings remained at old limits, causing pool overflow during normal traffic\nHow It Was Resolved: Updated max_overflow from 10 to 100 in application config. Deployed config update without service restart.\nWhat Did NOT Work: Attempted service restart before finding root cause \u2014 extended downtime\nSuccessful Runbook: payment-db-recovery\nRecovery Time: 22 minutes\nLessons Learned: Infrastructure changes must be accompanied by application configuration review. Pool settings should be proportional to DB server capacity.\nPreventive Actions: Created infrastructure change checklist that includes application config review. DB pool settings now documented in runbook.",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-27T19:28:43.606564"
+  },
+  {
+    "id": "mem-0005",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2025-092\nService: Auth Service\nSeverity: Critical\nSymptoms: Login failures, JWT token validation errors, 401 responses across all services\nError Rate: 100.0%\nDeployment Version: v1.8.0\nContext: Occurred after scheduled secret rotation\nRoot Cause: JWT secret rotation deployed without grace period \u2014 old tokens invalidated immediately causing 100% auth failure\nResolution: Rolled back secret rotation, implemented dual-key validation, planned gradual migration over 24h\nRunbook Used: auth-jwt-recovery\nRecovery Time: 15 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-27T19:28:45.885571"
+  },
+  {
+    "id": "mem-0006",
+    "bank_id": "incident-response-agent",
+    "content": "POST-MORTEM for INC-2025-092\nService: Auth Service\nRoot Cause (confirmed): JWT secret rotation mechanism did not implement token migration grace period\nWhat Happened: Scheduled secret rotation immediately invalidated all existing tokens, causing 100% authentication failures across all services that relied on auth service\nHow It Was Resolved: Emergency rollback of secret, temporary dual-key validation added. Full rotation completed over 24 hours with grace period.\nWhat Did NOT Work: Initial attempt to force re-login all users failed due to volume\nSuccessful Runbook: auth-jwt-recovery\nRecovery Time: 15 minutes\nLessons Learned: Secret rotations must always include grace period for existing tokens. Never use hard cutover for JWT secrets in production.\nPreventive Actions: Auth runbook updated. Dual-key validation now built into rotation process. Staged rollout added for secret changes.",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-27T19:28:48.178456"
+  },
+  {
+    "id": "mem-0007",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2025-071\nService: API Gateway\nSeverity: High\nSymptoms: Rate limiting errors across all services, upstream timeout failures\nError Rate: 45.0%\nDeployment Version: gateway-v3.2.0\nContext: After scaling up backend services\nRoot Cause: API gateway upstream timeout too short after backend services scaled up \u2014 new instances took longer to warm up\nResolution: Increased proxy_read_timeout from 30s to 120s, added 60s slow-start for new pods\nRunbook Used: gateway-timeout-recovery\nRecovery Time: 35 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-27T19:28:50.506254"
+  },
+  {
+    "id": "mem-0008",
+    "bank_id": "incident-response-agent",
+    "content": "POST-MORTEM for INC-2025-071\nService: API Gateway\nRoot Cause (confirmed): Default upstream timeout insufficient for larger backend instances that require longer JVM warm-up time\nWhat Happened: During a scale-up event, new JVM-based service instances were added to rotation before completing warm-up. Gateway timeouts to these cold instances caused cascading failures.\nHow It Was Resolved: Increased upstream timeout, added slow-start configuration for new instances, implemented readiness probes.\nWhat Did NOT Work: Rolling back scaling operation worsened load on existing instances temporarily\nSuccessful Runbook: gateway-timeout-recovery\nRecovery Time: 35 minutes\nLessons Learned: JVM services require warm-up period before taking traffic. Readiness probes must be configured for all services. Slow-start should be default for scale-out events.\nPreventive Actions: Added readiness probes to all JVM services. Slow-start now configured in service mesh. Scaling playbook updated.",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-27T19:28:52.821509"
+  },
+  {
+    "id": "mem-0009",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2025-055\nService: User Service\nSeverity: SEV-2\nSymptoms: User profile updates failing, 500 errors, database write timeouts\nError Rate: 28.0%\nDeployment Version: user-service-v4.1.0\nContext: Running bulk migration job alongside production traffic\nRoot Cause: Database deadlock between bulk migration job and production write operations on users table\nResolution: Killed migration job, waited for deadlocks to clear, rescheduled migration for 2am\nRunbook Used: db-deadlock-resolution\nRecovery Time: 18 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-27T19:28:55.119003"
+  },
+  {
+    "id": "mem-0010",
+    "bank_id": "incident-response-agent",
+    "content": "POST-MORTEM for INC-2025-055\nService: User Service\nRoot Cause (confirmed): Bulk migration job ran concurrently with production traffic without proper locking strategy\nWhat Happened: A bulk user data migration job was initiated during business hours. The job held row-level locks that conflicted with production write operations, causing cascading deadlocks.\nHow It Was Resolved: Terminated migration job, waited for deadlock resolution, verified data consistency, rescheduled migration for off-peak hours with proper rate limiting.\nWhat Did NOT Work: Tried to pause migration instead of stop \u2014 insufficient, deadlocks continued\nSuccessful Runbook: db-deadlock-resolution\nRecovery Time: 18 minutes\nLessons Learned: Bulk data operations must never run during business hours without proper lock management. Migration jobs should use advisory locks and rate limiting.\nPreventive Actions: Created production change policy requiring off-peak for bulk operations. Added migration job to maintenance window scheduler.",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-27T19:28:57.406495"
+  },
+  {
+    "id": "mem-0011",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-33EFEE\nService: User Service\nSeverity: Medium\nSymptoms: Slow response times, database query timeouts\nResolution: Restarted service, queries normalized within 5 minutes\nRecovery Time: 12 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-27T19:32:49.401255"
+  },
+  {
+    "id": "mem-0012",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-7086C5\nService: Payment API\nSeverity: Critical\nSymptoms: Complete payment service outage, all transactions failing\nResolution: Rolled back deployment, services restored\nRecovery Time: 15 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-27T19:32:53.342473"
+  },
+  {
+    "id": "mem-0013",
+    "bank_id": "incident-response-agent",
+    "content": "POST-MORTEM for INC-2026-7086C5\nService: Payment API\nRoot Cause (confirmed): Memory leak in new async payment handler introduced in latest deployment\nWhat Happened: Service ran out of memory under load, causing OOM kills\nHow It Was Resolved: Rolled back to previous version, memory stabilized\nSuccessful Runbook: payment-db-recovery\nRecovery Time: 15 minutes\nLessons Learned: All deployments must include memory profiling under load. OOM alerts must fire earlier.\nPreventive Actions: Added memory usage to deployment health gates",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-27T19:32:53.443849"
+  },
+  {
+    "id": "mem-0014",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-BA5214\nService: User Service\nSeverity: Medium\nSymptoms: Slow response times, database query timeouts\nResolution: Restarted service, queries normalized within 5 minutes\nRecovery Time: 12 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:02:44.542594"
+  },
+  {
+    "id": "mem-0015",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-F20ADE\nService: Payment API\nSeverity: Critical\nSymptoms: Complete payment service outage, all transactions failing\nResolution: Rolled back deployment, services restored\nRecovery Time: 15 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:02:49.715617"
+  },
+  {
+    "id": "mem-0016",
+    "bank_id": "incident-response-agent",
+    "content": "POST-MORTEM for INC-2026-F20ADE\nService: Payment API\nRoot Cause (confirmed): Memory leak in new async payment handler introduced in latest deployment\nWhat Happened: Service ran out of memory under load, causing OOM kills\nHow It Was Resolved: Rolled back to previous version, memory stabilized\nSuccessful Runbook: payment-db-recovery\nRecovery Time: 15 minutes\nLessons Learned: All deployments must include memory profiling under load. OOM alerts must fire earlier.\nPreventive Actions: Added memory usage to deployment health gates",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:02:52.065036"
+  },
+  {
+    "id": "mem-0017",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-48D69A\nService: User Service\nSeverity: Medium\nSymptoms: Slow response times, database query timeouts\nResolution: Restarted service, queries normalized within 5 minutes\nRecovery Time: 12 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:16:04.968875"
+  },
+  {
+    "id": "mem-0018",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-4A362E\nService: Payment API\nSeverity: Critical\nSymptoms: Complete payment service outage, all transactions failing\nResolution: Rolled back deployment, services restored\nRecovery Time: 15 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:16:13.508521"
+  },
+  {
+    "id": "mem-0019",
+    "bank_id": "incident-response-agent",
+    "content": "POST-MORTEM for INC-2026-4A362E\nService: Payment API\nRoot Cause (confirmed): Memory leak in new async payment handler introduced in latest deployment\nWhat Happened: Service ran out of memory under load, causing OOM kills\nHow It Was Resolved: Rolled back to previous version, memory stabilized\nSuccessful Runbook: payment-db-recovery\nRecovery Time: 15 minutes\nLessons Learned: All deployments must include memory profiling under load. OOM alerts must fire earlier.\nPreventive Actions: Added memory usage to deployment health gates",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:16:13.637731"
+  },
+  {
+    "id": "mem-0020",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-85A8D0\nService: User Service\nSeverity: Medium\nSymptoms: Slow response times, database query timeouts\nResolution: Restarted service, queries normalized within 5 minutes\nRecovery Time: 12 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:28:40.783727"
+  },
+  {
+    "id": "mem-0021",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-D6A1C0\nService: Payment API\nSeverity: Critical\nSymptoms: Complete payment service outage, all transactions failing\nResolution: Rolled back deployment, services restored\nRecovery Time: 15 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:28:52.651222"
+  },
+  {
+    "id": "mem-0022",
+    "bank_id": "incident-response-agent",
+    "content": "POST-MORTEM for INC-2026-D6A1C0\nService: Payment API\nRoot Cause (confirmed): Memory leak in new async payment handler introduced in latest deployment\nWhat Happened: Service ran out of memory under load, causing OOM kills\nHow It Was Resolved: Rolled back to previous version, memory stabilized\nSuccessful Runbook: payment-db-recovery\nRecovery Time: 15 minutes\nLessons Learned: All deployments must include memory profiling under load. OOM alerts must fire earlier.\nPreventive Actions: Added memory usage to deployment health gates",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:28:55.105735"
+  },
+  {
+    "id": "mem-0031",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-TEST\nService: Payment API\nSeverity: Critical\nSymptoms: Database timeout\nRoot Cause: Pool exhaustion\nResolution: Increased connection pool size",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:53:48.331014"
+  },
+  {
+    "id": "mem-0024",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-LIVE\nService: Payment API\nSymptoms: Latency spike",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:34:41.351709"
+  },
+  {
+    "id": "mem-0025",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-E4662A\nService: User Service\nSeverity: Medium\nSymptoms: Slow response times, database query timeouts\nResolution: Restarted service, queries normalized within 5 minutes\nRecovery Time: 12 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:37:14.354084"
+  },
+  {
+    "id": "mem-0026",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-9E3209\nService: Payment API\nSeverity: Critical\nSymptoms: Complete payment service outage, all transactions failing\nResolution: Rolled back deployment, services restored\nRecovery Time: 15 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:37:18.678183"
+  },
+  {
+    "id": "mem-0027",
+    "bank_id": "incident-response-agent",
+    "content": "POST-MORTEM for INC-2026-9E3209\nService: Payment API\nRoot Cause (confirmed): Memory leak in new async payment handler introduced in latest deployment\nWhat Happened: Service ran out of memory under load, causing OOM kills\nHow It Was Resolved: Rolled back to previous version, memory stabilized\nSuccessful Runbook: payment-db-recovery\nRecovery Time: 15 minutes\nLessons Learned: All deployments must include memory profiling under load. OOM alerts must fire earlier.\nPreventive Actions: Added memory usage to deployment health gates",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:37:18.768392"
+  },
+  {
+    "id": "mem-0028",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-12AD16\nService: User Service\nSeverity: Medium\nSymptoms: Slow response times, database query timeouts\nResolution: Restarted service, queries normalized within 5 minutes\nRecovery Time: 12 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:53:41.559249"
+  },
+  {
+    "id": "mem-0029",
+    "bank_id": "incident-response-agent",
+    "content": "INCIDENT INC-2026-88EA9B\nService: Payment API\nSeverity: Critical\nSymptoms: Complete payment service outage, all transactions failing\nResolution: Rolled back deployment, services restored\nRecovery Time: 15 minutes",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:53:45.860703"
+  },
+  {
+    "id": "mem-0030",
+    "bank_id": "incident-response-agent",
+    "content": "POST-MORTEM for INC-2026-88EA9B\nService: Payment API\nRoot Cause (confirmed): Memory leak in new async payment handler introduced in latest deployment\nWhat Happened: Service ran out of memory under load, causing OOM kills\nHow It Was Resolved: Rolled back to previous version, memory stabilized\nSuccessful Runbook: payment-db-recovery\nRecovery Time: 15 minutes\nLessons Learned: All deployments must include memory profiling under load. OOM alerts must fire earlier.\nPreventive Actions: Added memory usage to deployment health gates",
+    "document_id": null,
+    "metadata": {},
+    "tags": [],
+    "created_at": "2026-09-28T14:53:48.028825"
+  }
+]
